@@ -14,14 +14,15 @@ from homeassistant.const import (
     STATE_OPENING
 )
 
+from .const import (
+    DOMAIN,
+    CONF_API_ENDPOINT,
+    CONF_GRENTON_ID,
+    CONF_OBJECT_NAME,
+    CONF_REVERSED
+)
+
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = 'grenton_objects'
-
-CONF_API_ENDPOINT = 'api_endpoint'
-CONF_GRENTON_ID = 'grenton_id'
-CONF_OBJECT_NAME = 'name'
-CONF_REVERSED = 'reversed'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_API_ENDPOINT): str,

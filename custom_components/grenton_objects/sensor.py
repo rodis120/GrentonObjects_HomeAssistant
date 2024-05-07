@@ -7,15 +7,16 @@ from homeassistant.components.sensor import (
     PLATFORM_SCHEMA
 )
 
+from .const import (
+    DOMAIN,
+    CONF_API_ENDPOINT,
+    CONF_GRENTON_ID,
+    CONF_GRENTON_TYPE,
+    CONF_OBJECT_NAME,
+    CONF_UNIT_OF_MEASUREMENT
+)
+
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = 'grenton_objects'
-
-CONF_API_ENDPOINT = 'api_endpoint'
-CONF_GRENTON_ID = 'grenton_id'
-CONF_GRENTON_TYPE = 'grenton_type'
-CONF_OBJECT_NAME = 'name'
-CONF_UNIT_OF_MEASUREMENT = 'unit_of_measurement'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_API_ENDPOINT): str,

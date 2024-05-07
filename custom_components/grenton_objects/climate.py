@@ -10,13 +10,14 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import UnitOfTemperature
 
+from .const import (
+    DOMAIN,
+    CONF_API_ENDPOINT,
+    CONF_GRENTON_ID,
+    CONF_OBJECT_NAME
+)
+
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = 'grenton_objects'
-
-CONF_API_ENDPOINT = 'api_endpoint'
-CONF_GRENTON_ID = 'grenton_id'
-CONF_OBJECT_NAME = 'name'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_API_ENDPOINT): str,
