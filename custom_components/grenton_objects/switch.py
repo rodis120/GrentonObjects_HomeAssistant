@@ -1,6 +1,5 @@
 import requests
 import logging
-import json
 import voluptuous as vol
 from homeassistant.components.switch import (
     SwitchEntity,
@@ -14,6 +13,7 @@ from .const import (
     CONF_GRENTON_ID,
     CONF_OBJECT_NAME
 )
+from .utils import get_feature, set_feature
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,38 +52,22 @@ class GrentonSwitch(SwitchEntity):
 
     def turn_on(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(0, 1)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json=command
-            ) 
-            response.raise_for_status()
+            set_feature(self._api_endpoint, self._grenton_id, 0, 1)
             self._state = STATE_ON
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to turn on the switch: {ex}")
 
     def turn_off(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(0, 0)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            set_feature(self._api_endpoint, self._grenton_id, 0, 0)
             self._state = STATE_OFF
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to turn off the switch: {ex}")
 
     def update(self):
         try:
-            command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(0)')"}
-            response = requests.get(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
-            data = response.json()
-            self._state = STATE_OFF if data.get("status") == 0 else STATE_ON
+            response = get_feature(self._api_endpoint, self._grenton_id, 0)
+            self._state = STATE_OFF if response == 0 else STATE_ON
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to update the switch state: {ex}")
             self._state = None

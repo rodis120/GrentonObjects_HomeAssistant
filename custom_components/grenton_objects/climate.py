@@ -1,6 +1,5 @@
 import requests
 import logging
-import json
 import voluptuous as vol
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -16,6 +15,7 @@ from .const import (
     CONF_GRENTON_ID,
     CONF_OBJECT_NAME
 )
+from .utils import get_features, send_batch_requests, execute
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,50 +91,51 @@ class GrentonClimate(ClimateEntity):
         try:
             temperature = kwargs.get("temperature", 20)
             self._target_temperature = temperature
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(8, 0)')"}
-            command.update({"command_2": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(3, {temperature})')"})
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            
+            splt = self._grenton_id.split('->')
+            commands = [
+                f"{splt[0]}:execute(0, '{splt[1]}:set(8, 0)')",
+                f"{splt[0]}:execute(0, '{splt[1]}:set(3, {temperature})')"
+            ]
+            
+            send_batch_requests(self._api_endpoint, commands)
+            
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to set the climate temperature: {ex}")
 
     def set_hvac_mode(self, hvac_mode):
         try:
             self._hvac_mode = hvac_mode
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(1, 0)')"}
+            
+            splt = self._grenton_id.split('->')
             if hvac_mode == HVACMode.HEAT:
-                command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(0, 0)')"}
-                command.update({"command_2": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(7, 0)')"})
+                commands = [
+                    f"{splt[0]}:execute(0, '{splt[1]}:execute(0, 0)')",
+                    f"{splt[0]}:execute(0, '{splt[1]}:set(7, 0)')"
+                ]
+                
+                send_batch_requests(self._api_endpoint, commands)
             elif hvac_mode == HVACMode.COOL:
-                command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(0, 0)')"}
-                command.update({"command_2": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:set(7, 1)')"})
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+                commands = [
+                    f"{splt[0]}:execute(0, '{splt[1]}:execute(0, 0)')",
+                    f"{splt[0]}:execute(0, '{splt[1]}:set(7, 1)')"
+                ]
+                
+                send_batch_requests(self._api_endpoint, commands)
+            else:
+                execute(self._api_endpoint, self._grenton_id, 1, 0)
+                
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to set the climate hvac_mode: {ex}")
         
 
     def update(self):
         try:
-            command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(6)')"}
-            command.update({"status_2": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(7)')"})
-            command.update({"status_3": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(12)')"})
-            command.update({"status_4": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(14)')"})
-            response = requests.get(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
-            data = response.json()
-            self._hvac_mode = HVACMode.OFF if data.get("status") == 0 else (HVACMode.COOL if data.get("status_2") == 1 else HVACMode.HEAT)
-            self._target_temperature = data.get("status_3")
-            self._current_temperature = data.get("status_4")
+            response = get_features(self._api_endpoint, self._grenton_id, [6, 7, 12, 14])
+            
+            self._hvac_mode = HVACMode.OFF if response[0] == 0 else (HVACMode.COOL if response[1] == 1 else HVACMode.HEAT)
+            self._target_temperature = response[2]
+            self._current_temperature = response[3]
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to update the climate state: {ex}")
             self._state = None

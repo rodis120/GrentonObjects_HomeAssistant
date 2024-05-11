@@ -1,6 +1,5 @@
 import requests
 import logging
-import json
 import voluptuous as vol
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
@@ -14,6 +13,7 @@ from .const import (
     CONF_GRENTON_ID,
     CONF_OBJECT_NAME
 )
+from .utils import get_feature
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,14 +52,9 @@ class GrentonBinarySensor(BinarySensorEntity):
 
     def update(self):
         try:
-            command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(0)')"}
-            response = requests.get(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
-            data = response.json()
-            self._state = STATE_OFF if data.get("status") == 0 else STATE_ON
+            data = get_feature(self._api_endpoint, self._grenton_id, 0)
+            
+            self._state = STATE_OFF if data == 0 else STATE_ON
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to update the switch state: {ex}")
             self._state = None

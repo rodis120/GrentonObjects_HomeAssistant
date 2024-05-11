@@ -1,6 +1,5 @@
 import requests
 import logging
-import json
 import voluptuous as vol
 from homeassistant.components.cover import (
     CoverEntity,
@@ -21,6 +20,7 @@ from .const import (
     CONF_OBJECT_NAME,
     CONF_REVERSED
 )
+from .utils import get_features, execute
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +50,7 @@ class GrentonCover(CoverEntity):
         self._current_cover_position = None
         self._current_cover_tilt_position = None
         self._unique_id = f"grenton_{grenton_id.split('->')[1]}"
+        self._is_zwave = grenton_id.split('->')[1].startswith('ZWA')
 
     @property
     def name(self):
@@ -81,36 +82,24 @@ class GrentonCover(CoverEntity):
 
     def open_cover(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(0, 0)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 0, 0)
+            
             self._state = STATE_OPENING
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to open the cover: {ex}")
 
     def close_cover(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(1, 0)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 1, 0)
+            
             self._state = STATE_CLOSING
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to close the cover: {ex}")
 
     def stop_cover(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(3, 0)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 3, 0)
+            
             self._state = STATE_OPEN
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to stop the cover: {ex}")
@@ -147,73 +136,42 @@ class GrentonCover(CoverEntity):
             tilt_position = kwargs.get("tilt_position", 90)
             self._current_cover_tilt_position = tilt_position
             tilt_position = tilt_position * 90 / 100
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(9, {tilt_position})')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 9, tilt_position)
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to set the cover tilt position: {ex}")
 
     def open_cover_tilt(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(9, 90)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 9, 90)
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to open the cover tilt: {ex}")
 
     def close_cover_tilt(self, **kwargs):
         try:
-            command = {"command": f"{self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:execute(9, 0)')"}
-            response = requests.post(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
+            execute(self._api_endpoint, self._grenton_id, 9, 0)
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to close the cover tilt: {ex}")
 
     def update(self):
-        try:
-            if self._grenton_id.split('->')[1].startswith("ZWA"):
-                command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(2)')"}
-            else:
-                command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(0)')"}
-            if self._grenton_id.split('->')[1].startswith("ZWA"):
-                command.update({"status_2": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(4)')"})
-            else:
-                command.update({"status_2": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(7)')"})
-            if self._grenton_id.split('->')[1].startswith("ZWA"):
-                command.update({"status_3": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(6)')"})
-            else:
-                command.update({"status_3": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get(8)')"})
-            response = requests.get(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
-            data = response.json()
-            self._state = STATE_CLOSED if data.get("status_2") == 0 else STATE_OPEN
-            if data.get("status") == 1:
+        try:    
+            response = get_features(self._api_endpoint, self._grenton_id, [2, 4, 6] if self._is_zwave else [0, 7, 8])
+            
+            self._state = STATE_CLOSED if response[1] == 0 else STATE_OPEN
+            if response[0] == 1:
                 if self._reversed == True:
                     self._state = STATE_CLOSING
                 else:
                     self._state = STATE_OPENING
-            elif data.get("status") == 2:
+            elif response[0] == 2:
                 if self._reversed == True:
                     self._state = STATE_OPENING
                 else:
                     self._state = STATE_CLOSING
-            temp_position = data.get("status_2")
+            temp_position = response[1]
             if self._reversed == True:
                 temp_position = 100 - temp_position
             self._current_cover_position = temp_position
-            self._current_cover_tilt_position = data.get("status_3") * 100 / 90
+            self._current_cover_tilt_position = response[2] * 100 / 90
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to update the cover state: {ex}")
             self._state = None

@@ -1,6 +1,5 @@
 import requests
 import logging
-import json
 import voluptuous as vol
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -15,6 +14,7 @@ from .const import (
     CONF_OBJECT_NAME,
     CONF_UNIT_OF_MEASUREMENT
 )
+from .utils import get_feature, send_request
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ class GrentonSensor(SensorEntity):
     def update(self):
         try:
             if len(self._grenton_id.split('->')) == 1:
-                command = {"status": f"return getVar(\"{self._grenton_id}\")"}
+                self._native_value = send_request(self._api_endpoint, f"return getVar(\"{self._grenton_id}\")")  
             elif self._grenton_id.split('->')[1].isupper():
                 grenton_type_mapping = {
                     "MODBUS": 14,
@@ -78,16 +78,9 @@ class GrentonSensor(SensorEntity):
                     "MODBUS_SLAVE_RTU": 10,
                 }
                 index = grenton_type_mapping.get(self._grenton_type, 0)
-                command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, '{self._grenton_id.split('->')[1]}:get({index})')"}
+                self._native_value = get_feature(self._api_endpoint, self._grenton_id, index)
             else:
-                command = {"status": f"return {self._grenton_id.split('->')[0]}:execute(0, 'getVar(\"{self._grenton_id.split('->')[1]}\")')"}
-            response = requests.get(
-                f"{self._api_endpoint}",
-                json = command
-            )
-            response.raise_for_status()
-            data = response.json()
-            self._native_value = data.get("status")
+                self._native_value = send_request(self._api_endpoint, f"return {self._grenton_id.split('->')[0]}:execute(0, 'getVar(\"{self._grenton_id.split('->')[1]}\")')")
         except requests.RequestException as ex:
             _LOGGER.error(f"Failed to update the switch state: {ex}")
             self._state = None
